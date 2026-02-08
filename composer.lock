@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "7de0428713329d2556227afd64b91b22",
+    "content-hash": "bc685d4e6711dfa949eb356647c6d4c5",
     "packages": [
         {
             "name": "flightphp/core",

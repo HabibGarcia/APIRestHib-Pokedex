@@ -1,7 +1,7 @@
 <?php
 require 'vendor/autoload.php';
-require 'SimplePdo.php'; // Asegúrate de tener este archivo
-//use Phpml\Statistics\Correlation;
+require 'SimplePdo.php';
+use Phpml\Math\Statistic\Mean;
 /*if (!class_exists('Phpml\Statistics\Correlation')) {
     echo "ERROR CRÍTICO: La librería PHP-ML no está cargada en el sistema.";
     // Opcional: ver qué hay en el autoload
@@ -18,42 +18,51 @@ $password = 'habib'; // Pon tu contraseña si tienes
 Flight::register('db', 'SimplePdo', [$dsn, $username, $password]);
 
 // --- APARTADO A: ENDPOINTS CRUD ---
+// --- APARTADO A: Grupo de Endpoints para Pokémon ---
+// Agrupamos bajo el prefijo '/pokemons'
+Flight::group('/pokemons', function(\flight\net\Router $router) {
 
-// GET /pokemons - Retornar todos
-Flight::route('GET /pokemons', function() {
-    $db = Flight::db();
-    $lista = $db->query("SELECT * FROM pokemons")->fetchAll();
-    Flight::json($lista);
-});
+    // 1. GET /pokemons - Obtener todos
+    $router->get('', function() {
+        $db = Flight::db();
+        // Usamos query() de tu SimplePdo
+        $lista = $db->query("SELECT * FROM pokemons")->fetchAll();
+        Flight::json($lista);
+    });
 
-// GET /pokemons/{id} - Retornar uno o 404
-Flight::route('GET /pokemons/@id', function($id) {
-    $db = Flight::db();
-    $pokemon = $db->query("SELECT * FROM pokemons WHERE id = ?", [$id])->fetch();
-    
-    if ($pokemon) {
-        Flight::json($pokemon);
-    } else {
-        Flight::halt(404, json_encode(["error" => "Pokémon no encontrado"]));
-    }
-});
+    // 2. GET /pokemons/@id - Obtener uno por ID
+    $router->get('/@id', function($id) {
+        $db = Flight::db();
+        $pokemon = $db->query("SELECT * FROM pokemons WHERE id = ?", [$id])->fetch();
+        
+        if ($pokemon) {
+            Flight::json($pokemon);
+        } else {
+            // Error 404 según pide la práctica
+            Flight::halt(404, json_encode(["error" => "Pokémon no encontrado"]));
+        }
+    });
 
-// POST /pokemons - Insertar nuevo
-Flight::route('POST /pokemons', function() {
-    $db = Flight::db();
-    $request = Flight::request();
-    
-    $datos = [
-        $request->data->nombre,
-        $request->data->tipo,
-        $request->data->region,
-        $request->data->ataque,
-        $request->data->defensa
-    ];
+    // 3. POST /pokemons - Insertar nuevo
+    $router->post('', function() {
+        $db = Flight::db();
+        $request = Flight::request();
+        
+        $datos = [
+            $request->data->nombre,
+            $request->data->tipo,
+            $request->data->region,
+            $request->data->ataque,
+            $request->data->defensa
+        ];
 
-    $db->query("INSERT INTO pokemons (nombre, tipo, region, ataque, defensa) VALUES (?, ?, ?, ?, ?)", $datos);
-    
-    Flight::json(["status" => "Pokémon registrado", "id" => $db->lastInsertId()], 201);
+        $db->query("INSERT INTO pokemons (nombre, tipo, region, ataque, defensa) VALUES (?, ?, ?, ?, ?)", $datos);
+        
+        Flight::json([
+            "status" => "Pokémon registrado", 
+            "id" => $db->lastInsertId()
+        ], 201);
+    });
 });
 
 // GET /importar - Recupera de DummyJson, mapea y guarda en BD
@@ -145,86 +154,44 @@ Flight::route('GET /clima-batalla/@nombre', function($nombre) {
     ]);
 });
 
-/*
-Flight::route('GET /estadisticas', function() {
-    $db = Flight::db();
-    $data = $db->query("SELECT ataque, defensa FROM pokemons")->fetchAll();
+// --- Apartado D: Análisis de Medias por Tipo (PHP-ML) ---
 
-    if (count($data) < 2) {
-        Flight::json(["error" => "Necesitas al menos 2 pokemons para calcular la correlacion"]);
-        return;
-    }
-
-    $ataques = array_column($data, 'ataque');
-    $defensas = array_column($data, 'defensa');
-
-    // LLAMADA DIRECTA (Sin depender del 'use' de arriba)
-    $correlacion = \Phpml\Statistics\Correlation::pearson($ataques, $defensas);
-
-    Flight::json([
-        "conteo" => count($data),
-        "correlacion" => round($correlacion, 4)
-    ]);
-});
-*/
-
-// Apartado (d): Cálculo de datos estadísticos y correlacionales (Lógica manual de Pearson)
 Flight::route('GET /estadisticas', function() {
     $db = Flight::db();
     
-    // 1. Obtenemos los datos de la BD
-    $data = $db->query("SELECT ataque, defensa FROM pokemons")->fetchAll();
-
-    if (count($data) < 2) {
-        Flight::json(["error" => "Se necesitan al menos 2 registros para el análisis"], 400);
-        return;
+    // 1. Recuperamos los datos de tus Pokémon
+    // Nota: Usamos query()->fetchAll() que es como lo tienes en tu SimplePdo
+    $pokemons = $db->query("SELECT tipo, ataque, defensa FROM pokemons")->fetchAll();
+    
+    if (empty($pokemons)) {
+        Flight::halt(404, json_encode(["error" => "No hay pokémons para analizar"]));
     }
 
-    // 2. Extraemos las columnas para el cálculo
-    $x = array_column($data, 'ataque');
-    $y = array_column($data, 'defensa');
+    // 2. Agrupamos las estadísticas por tipo de Pokémon
+    $datosPorTipo = [];
+    foreach ($pokemons as $p) {
+        $tipo = $p['tipo'];
+        $datosPorTipo[$tipo]['ataques'][] = (int)$p['ataque'];
+        $datosPorTipo[$tipo]['defensas'][] = (int)$p['defensa'];
+    }
 
-    // 3. Algoritmo de Coeficiente de Correlación de Pearson
-    // Implementamos la lógica que normalmente haría PHP-ML
-    $pearson = function($x, $y) {
-        $n = count($x);
-        if ($n === 0) return 0;
+    $analisis = [];
 
-        $avgX = array_sum($x) / $n;
-        $avgY = array_sum($y) / $n;
+    // 3. Calculamos las medias usando PHP-ML para cada tipo
+    foreach ($datosPorTipo as $tipo => $valores) {
+        // Usamos Mean::arithmetic() como en el código de tu compañera
+        $analisis[$tipo] = [
+            "cantidad" => count($valores['ataques']),
+            "media_ataque" => round(Mean::arithmetic($valores['ataques']), 2),
+            "media_defensa" => round(Mean::arithmetic($valores['defensas']), 2)
+        ];
+    }
 
-        $num = 0;
-        $den1 = 0;
-        $den2 = 0;
-
-        for ($i = 0; $i < $n; $i++) {
-            $diffX = $x[$i] - $avgX;
-            $diffY = $y[$i] - $avgY;
-            $num += $diffX * $diffY;
-            $den1 += pow($diffX, 2);
-            $den2 += pow($diffY, 2);
-        }
-
-        $divisor = sqrt($den1 * $den2);
-        return ($divisor == 0) ? 0 : $num / $divisor;
-    };
-
-    $resultadoCorrelacion = $pearson($x, $y);
-
-    // 4. Respuesta con Inteligencia de Negocios
+    // 4. Respuesta JSON
     Flight::json([
-        "analisis_predictivo" => [
-            "total_muestras" => count($data),
-            "coeficiente_pearson" => round($resultadoCorrelacion, 4),
-            "interpretacion" => ($resultadoCorrelacion > 0) 
-                ? "Existe una tendencia: a mayor ataque, mayor defensa." 
-                : "No existe una relación lineal clara entre ataque y defensa.",
-            "metodologia" => "Análisis de correlación aplicado sobre repositorio local"
-        ],
-        "estadisticas_basicas" => [
-            "ataque_promedio" => round(array_sum($x) / count($x), 2),
-            "defensa_promedio" => round(array_sum($y) / count($y), 2)
-        ]
+        "informe" => "Análisis estadístico de fuerza por tipo de Pokémon",
+        "resultados" => $analisis,
+        "libreria_utilizada" => "PHP-ML (Machine Learning Library)"
     ]);
 });
 Flight::start();
