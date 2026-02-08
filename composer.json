@@ -1,0 +1,6 @@
+{
+    "require": {
+        "flightphp/core": "^3.10",
+        "php-ai/php-ml": "^0.10.0"
+    }
+}
