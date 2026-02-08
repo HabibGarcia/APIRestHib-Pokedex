@@ -2,7 +2,6 @@
 
 class SimplePdo {
     protected $pdo;
-
     /**
      * Constructor: Establece la conexión con la base de datos.
      */

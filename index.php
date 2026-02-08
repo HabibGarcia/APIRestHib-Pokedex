@@ -1,7 +1,10 @@
 <?php
+//Aquí están todas las recomendaciónes y requerimientos de la práctica
 require 'vendor/autoload.php';
 require 'SimplePdo.php';
 use Phpml\Math\Statistic\Mean;
+
+// Verificación de de la PHP-ML
 /*if (!class_exists('Phpml\Statistics\Correlation')) {
     echo "ERROR CRÍTICO: La librería PHP-ML no está cargada en el sistema.";
     // Opcional: ver qué hay en el autoload
@@ -9,16 +12,15 @@ use Phpml\Math\Statistic\Mean;
     die();
 }*/
 
-// 1. Configuración de la base de datos
+//Configuración de la base de datos USER: habib, PASS: habib, DB: pokemon_db
 $dsn = 'mysql:host=localhost;dbname=pokemon_db;charset=utf8';
 $username = 'habib'; 
 $password = 'habib'; // Pon tu contraseña si tienes
 
-// 2. Registrar SimplePdo en Flight
+//Registrar SimplePdo en Flight
 Flight::register('db', 'SimplePdo', [$dsn, $username, $password]);
 
-// --- APARTADO A: ENDPOINTS CRUD ---
-// --- APARTADO A: Grupo de Endpoints para Pokémon ---
+// Apartado A: Grupo de Endpoints para Pokémon
 // Agrupamos bajo el prefijo '/pokemons'
 Flight::group('/pokemons', function(\flight\net\Router $router) {
 
@@ -39,7 +41,7 @@ Flight::group('/pokemons', function(\flight\net\Router $router) {
             Flight::json($pokemon);
         } else {
             // Error 404 según pide la práctica
-            Flight::halt(404, json_encode(["error" => "Pokémon no encontrado"]));
+            Flight::halt(404, json_encode(["error" => "Pokemon no encontrado"]));
         }
     });
 
@@ -65,7 +67,7 @@ Flight::group('/pokemons', function(\flight\net\Router $router) {
     });
 });
 
-// GET /importar - Recupera de DummyJson, mapea y guarda en BD
+// Apartado B: Endpoint para importar datos desde DummyJson y mapearlos a tu BD
 Flight::route('GET /importar', function() {
     $db = Flight::db();
     
@@ -98,10 +100,8 @@ Flight::route('GET /importar', function() {
     ]);
 });
 
-/**
- * Apartado (c): Servicio que calcula el poder de un Pokémon según el clima real.
- * URL: /clima-batalla/@nombre
- */
+// Apartado C: Endpoint de Servicio Híbrido (Pokémon + Clima)
+// Ejemplo: GET /clima-batalla/Pikachu dependiendo del clima, el ataque del pokemon se potencia o no.
 Flight::route('GET /clima-batalla/@nombre', function($nombre) {
     $db = Flight::db();
     
@@ -154,13 +154,11 @@ Flight::route('GET /clima-batalla/@nombre', function($nombre) {
     ]);
 });
 
-// --- Apartado D: Análisis de Medias por Tipo (PHP-ML) ---
-
+//Apartado D: Análisis de Medias por Tipo (PHP-ML) 
 Flight::route('GET /estadisticas', function() {
     $db = Flight::db();
     
     // 1. Recuperamos los datos de tus Pokémon
-    // Nota: Usamos query()->fetchAll() que es como lo tienes en tu SimplePdo
     $pokemons = $db->query("SELECT tipo, ataque, defensa FROM pokemons")->fetchAll();
     
     if (empty($pokemons)) {
